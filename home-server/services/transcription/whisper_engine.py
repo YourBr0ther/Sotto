@@ -95,7 +95,7 @@ class WhisperEngine:
             beam_size=5,
             language=None,  # Auto-detect
             vad_filter=True,
-            vad_parameters={"threshold": 0.3},
+            vad_parameters={"threshold": 0.1},
         )
 
         segments = []

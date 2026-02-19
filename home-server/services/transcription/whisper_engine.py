@@ -94,8 +94,7 @@ class WhisperEngine:
             audio_array,
             beam_size=5,
             language=None,  # Auto-detect
-            vad_filter=True,
-            vad_parameters={"threshold": 0.1},
+            vad_filter=False,
         )
 
         segments = []

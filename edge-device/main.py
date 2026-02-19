@@ -15,7 +15,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from audio.input import PhoneMicInput
+from audio.input import AudioInput, PhoneMicInput, TermuxMicInput
 from audio.noise_filter import NoiseFilter
 from audio.output import HeadphoneMonitor, SpeakerOutput
 from audio.wake_word import WakeWordDetector
@@ -41,10 +41,16 @@ class SottoEdgeDevice:
         self._noise_filter = NoiseFilter(
             sample_rate=config.audio.sample_rate,
         )
-        self._audio_input = PhoneMicInput(
-            device_index=config.audio.input_device,
-            sample_rate=config.audio.sample_rate,
-        )
+        # Use Termux audio on Android (sounddevice/PortAudio can't access the mic)
+        if config.device.type == "android":
+            self._audio_input: AudioInput = TermuxMicInput(
+                sample_rate=config.audio.sample_rate,
+            )
+        else:
+            self._audio_input = PhoneMicInput(
+                device_index=config.audio.input_device,
+                sample_rate=config.audio.sample_rate,
+            )
         self._audio_output = SpeakerOutput(device_index=config.audio.output_device)
         self._audio_streamer = AudioStreamer(
             mqtt_client=self._mqtt,

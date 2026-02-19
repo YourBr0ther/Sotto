@@ -143,10 +143,11 @@ class PhoneMicInput(AudioInput):
 
 
 class TermuxMicInput(AudioInput):
-    """Microphone input using Termux:API's termux-microphone-record.
+    """Microphone input using PulseAudio's parec on Termux.
 
-    This works on Android where PortAudio/sounddevice cannot access the mic.
-    Records to a temp file in the background and reads chunks from it.
+    sounddevice/PortAudio can't access the mic on Android via Termux.
+    This uses parec (PulseAudio record) which outputs raw PCM to stdout.
+    Requires: pkg install pulseaudio && pulseaudio --start
     """
 
     def __init__(self, sample_rate: int = 16000) -> None:
@@ -155,71 +156,56 @@ class TermuxMicInput(AudioInput):
         self._process: subprocess.Popen | None = None
         self._buffer: queue.Queue[bytes] = queue.Queue(maxsize=200)
         self._reader_thread: threading.Thread | None = None
-        self._tmp_file: str | None = None
 
     def start_capture(self) -> None:
         if self._capturing:
             logger.warning("Audio capture already active")
             return
 
-        # Create a temp file for the raw PCM output
-        fd, self._tmp_file = tempfile.mkstemp(suffix=".pcm")
-        os.close(fd)
+        # Ensure PulseAudio is running
+        subprocess.run(
+            ["pulseaudio", "--start", "--exit-idle-time=-1"],
+            capture_output=True,
+        )
 
-        # Start termux-microphone-record outputting raw PCM
-        # -f raw: raw PCM, -r: sample rate, -c 1: mono, -e: 16-bit
+        # Start parec streaming raw PCM to stdout
         self._process = subprocess.Popen(
             [
-                "termux-microphone-record",
-                "-f", self._tmp_file,
-                "-r", str(self._sample_rate),
-                "-c", "1",
-                "-e", "16",
-                "-l", "0",  # record indefinitely
+                "parec",
+                "--format=s16le",
+                f"--rate={self._sample_rate}",
+                "--channels=1",
+                "--raw",
             ],
-            stdout=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
         )
 
-        # Give it a moment to start
-        time.sleep(0.5)
-
-        # Start reader thread that reads from the file
         self._capturing = True
         self._reader_thread = threading.Thread(target=self._read_loop, daemon=True)
         self._reader_thread.start()
-        logger.info("Termux audio capture started (rate=%d)", self._sample_rate)
+        logger.info("Termux PulseAudio capture started (rate=%d)", self._sample_rate)
 
     def _read_loop(self) -> None:
-        """Background thread that reads PCM data from the recording file."""
+        """Background thread that reads raw PCM from parec stdout."""
         chunk_bytes = int(self._sample_rate * 0.1) * 2  # 100ms of 16-bit mono
-        read_pos = 0
 
-        while self._capturing:
+        while self._capturing and self._process and self._process.stdout:
             try:
-                if self._tmp_file and os.path.exists(self._tmp_file):
-                    file_size = os.path.getsize(self._tmp_file)
-                    if file_size > read_pos + chunk_bytes:
-                        with open(self._tmp_file, "rb") as f:
-                            f.seek(read_pos)
-                            data = f.read(chunk_bytes)
-                        if data:
-                            read_pos += len(data)
-                            try:
-                                self._buffer.put_nowait(data)
-                            except queue.Full:
-                                try:
-                                    self._buffer.get_nowait()
-                                    self._buffer.put_nowait(data)
-                                except queue.Empty:
-                                    pass
-                    else:
-                        time.sleep(0.05)
-                else:
-                    time.sleep(0.1)
+                data = self._process.stdout.read(chunk_bytes)
+                if not data:
+                    break
+                try:
+                    self._buffer.put_nowait(data)
+                except queue.Full:
+                    try:
+                        self._buffer.get_nowait()
+                        self._buffer.put_nowait(data)
+                    except queue.Empty:
+                        pass
             except Exception as e:
                 logger.error("Termux audio read error: %s", e)
-                time.sleep(0.1)
+                break
 
     def read_chunk(self, duration_ms: int = 500) -> bytes:
         if not self._capturing:
@@ -245,27 +231,13 @@ class TermuxMicInput(AudioInput):
     def stop_capture(self) -> None:
         self._capturing = False
 
-        # Stop the recording
-        try:
-            subprocess.run(
-                ["termux-microphone-record", "-q"],
-                timeout=5,
-                capture_output=True,
-            )
-        except Exception:
-            pass
-
         if self._process is not None:
             self._process.terminate()
-            self._process = None
-
-        # Clean up temp file
-        if self._tmp_file and os.path.exists(self._tmp_file):
             try:
-                os.unlink(self._tmp_file)
-            except OSError:
-                pass
-            self._tmp_file = None
+                self._process.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                self._process.kill()
+            self._process = None
 
         # Drain buffer
         while not self._buffer.empty():

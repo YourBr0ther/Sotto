@@ -104,6 +104,7 @@ Sotto/
 │
 ├── home-server/              # Runs on home server (Docker)
 │   ├── docker-compose.yml    # Full server stack
+│   ├── k3s/                  # Kubernetes manifests (Kustomize)
 │   ├── services/
 │   │   ├── transcription/    # Whisper STT service
 │   │   ├── agent-brain/      # Core LLM agent logic
@@ -163,15 +164,19 @@ Sotto/
 ### Running Tests
 
 ```bash
-# Edge device tests
-cd edge-device
-pip install -r requirements-dev.txt
-pytest tests/ -v
+# All tests (259 tests across all services)
+pip install -r edge-device/requirements-dev.txt
+python -m pytest -v
 
-# Home server service tests
-cd home-server/services/agent-brain
-pip install -r requirements-dev.txt
-pytest tests/ -v
+# Edge device tests only
+python -m pytest edge-device/tests/ -v
+
+# Specific service tests
+python -m pytest home-server/services/agent-brain/tests/ -v
+python -m pytest home-server/services/transcription/tests/ -v
+python -m pytest home-server/services/tts/tests/ -v
+python -m pytest home-server/services/operational-db/tests/ -v
+python -m pytest home-server/services/vault-manager/tests/ -v
 ```
 
 ### Code Style
@@ -200,17 +205,26 @@ docker compose ps
 
 ### k3s / Kubernetes
 
-k3s manifests are provided in `home-server/k3s/`:
+k3s manifests are provided in `home-server/k3s/` with Kustomize support:
 
 ```bash
-kubectl apply -f home-server/k3s/
+# Apply all manifests
+kubectl apply -k home-server/k3s/
+
+# Or apply individually
+kubectl apply -f home-server/k3s/namespace.yaml
+kubectl apply -f home-server/k3s/mqtt-broker.yaml
+kubectl apply -f home-server/k3s/ollama.yaml
+kubectl apply -f home-server/k3s/transcription.yaml
+kubectl apply -f home-server/k3s/agent-brain.yaml
+kubectl apply -f home-server/k3s/tts.yaml
 ```
 
 ## Roadmap
 
 | Phase | Description | Status |
 |-------|-------------|--------|
-| **Phase 1** | Android app prototype | **In Progress** |
+| **Phase 1** | Android prototype (edge + server) | **Core Complete** |
 | Phase 2 | Raspberry Pi 5 belt device | Planned |
 | Phase 3 | Smart glasses + undershirt | Planned |
 | Phase 4 | IO controller (desk integration) | Planned |

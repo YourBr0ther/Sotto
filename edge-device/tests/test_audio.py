@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from audio.input import AudioInput, PhoneMicInput
+from audio.input import AudioInput, PhoneMicInput, TermuxMicInput
 from audio.noise_filter import NoiseFilter
 from audio.output import AudioOutput, HeadphoneMonitor, SpeakerOutput
 from audio.wake_word import WakeWordDetector
@@ -22,33 +22,32 @@ class TestAudioInputABC:
 
 
 class TestPhoneMicInput:
+    def _make_mock_sd(self) -> MagicMock:
+        mock_sd = MagicMock()
+        mock_sd.InputStream.return_value = MagicMock()
+        return mock_sd
+
     def test_init_defaults(self) -> None:
-        with patch("audio.input.sd"):
-            mic = PhoneMicInput()
-            assert mic.get_sample_rate() == 16000
-            assert mic.is_capturing() is False
+        mic = PhoneMicInput()
+        assert mic.get_sample_rate() == 16000
+        assert mic.is_capturing() is False
 
     def test_init_custom_rate(self) -> None:
-        with patch("audio.input.sd"):
-            mic = PhoneMicInput(sample_rate=44100)
-            assert mic.get_sample_rate() == 44100
+        mic = PhoneMicInput(sample_rate=44100)
+        assert mic.get_sample_rate() == 44100
 
     def test_start_capture(self) -> None:
-        with patch("audio.input.sd") as mock_sd:
-            mock_stream = MagicMock()
-            mock_sd.InputStream.return_value = mock_stream
-
+        mock_sd = self._make_mock_sd()
+        with patch.dict("sys.modules", {"sounddevice": mock_sd}):
             mic = PhoneMicInput()
             mic.start_capture()
 
             assert mic.is_capturing() is True
-            mock_stream.start.assert_called_once()
+            mock_sd.InputStream.return_value.start.assert_called_once()
 
     def test_start_capture_twice_warns(self) -> None:
-        with patch("audio.input.sd") as mock_sd:
-            mock_stream = MagicMock()
-            mock_sd.InputStream.return_value = mock_stream
-
+        mock_sd = self._make_mock_sd()
+        with patch.dict("sys.modules", {"sounddevice": mock_sd}):
             mic = PhoneMicInput()
             mic.start_capture()
             mic.start_capture()  # Should not create another stream
@@ -56,10 +55,9 @@ class TestPhoneMicInput:
             assert mock_sd.InputStream.call_count == 1
 
     def test_stop_capture(self) -> None:
-        with patch("audio.input.sd") as mock_sd:
-            mock_stream = MagicMock()
-            mock_sd.InputStream.return_value = mock_stream
-
+        mock_sd = self._make_mock_sd()
+        mock_stream = mock_sd.InputStream.return_value
+        with patch.dict("sys.modules", {"sounddevice": mock_sd}):
             mic = PhoneMicInput()
             mic.start_capture()
             mic.stop_capture()
@@ -69,16 +67,13 @@ class TestPhoneMicInput:
             mock_stream.close.assert_called_once()
 
     def test_read_chunk_raises_when_not_capturing(self) -> None:
-        with patch("audio.input.sd"):
-            mic = PhoneMicInput()
-            with pytest.raises(RuntimeError, match="not started"):
-                mic.read_chunk()
+        mic = PhoneMicInput()
+        with pytest.raises(RuntimeError, match="not started"):
+            mic.read_chunk()
 
     def test_read_chunk_returns_bytes(self) -> None:
-        with patch("audio.input.sd") as mock_sd:
-            mock_stream = MagicMock()
-            mock_sd.InputStream.return_value = mock_stream
-
+        mock_sd = self._make_mock_sd()
+        with patch.dict("sys.modules", {"sounddevice": mock_sd}):
             mic = PhoneMicInput(sample_rate=16000)
             mic.start_capture()
 
@@ -89,6 +84,97 @@ class TestPhoneMicInput:
             chunk = mic.read_chunk(duration_ms=100)
             assert isinstance(chunk, bytes)
             assert len(chunk) > 0
+
+
+class TestTermuxMicInput:
+    def test_init_defaults(self) -> None:
+        mic = TermuxMicInput()
+        assert mic.get_sample_rate() == 16000
+        assert mic.is_capturing() is False
+
+    def test_init_custom_rate(self) -> None:
+        mic = TermuxMicInput(sample_rate=44100)
+        assert mic.get_sample_rate() == 44100
+
+    def test_start_capture_spawns_thread(self) -> None:
+        mic = TermuxMicInput()
+        with patch("audio.input.subprocess.run"):
+            mic.start_capture()
+            assert mic.is_capturing() is True
+            assert mic._capture_thread is not None
+            assert mic._capture_thread.is_alive()
+            mic._capturing = False  # stop the loop
+
+    def test_start_capture_twice_warns(self) -> None:
+        mic = TermuxMicInput()
+        with patch("audio.input.subprocess.run"):
+            mic.start_capture()
+            mic.start_capture()  # Should warn, not double-start
+            assert mic.is_capturing() is True
+            mic._capturing = False
+
+    def test_read_chunk_raises_when_not_capturing(self) -> None:
+        mic = TermuxMicInput()
+        with pytest.raises(RuntimeError, match="not started"):
+            mic.read_chunk()
+
+    def test_read_chunk_returns_bytes_from_buffer(self) -> None:
+        mic = TermuxMicInput(sample_rate=16000)
+        mic._capturing = True
+        # Push 500ms of silence (16000 * 0.5 * 2 bytes = 16000 bytes)
+        chunk_100ms = b"\x00" * 3200
+        for _ in range(5):
+            mic._buffer.put(chunk_100ms)
+        result = mic.read_chunk(duration_ms=500)
+        assert isinstance(result, bytes)
+        assert len(result) == 16000
+
+    def test_stop_capture_cleans_up(self) -> None:
+        import os
+        mic = TermuxMicInput()
+        temp_dir = mic._clip_dir
+        assert os.path.isdir(temp_dir)
+
+        with patch("audio.input.subprocess.run"):
+            mic._capturing = True
+            mic.stop_capture()
+
+        assert mic.is_capturing() is False
+        assert not os.path.isdir(temp_dir)
+
+    def test_capture_loop_records_and_converts(self) -> None:
+        mic = TermuxMicInput(sample_rate=16000)
+        mic._capturing = True
+
+        # 200ms of PCM silence = 6400 bytes (2 chunks of 3200)
+        fake_pcm = b"\x00" * 6400
+
+        call_count = 0
+
+        def fake_run(cmd, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            result = MagicMock(returncode=0, stdout=b"", stderr=b"")
+            if "ffmpeg" in cmd:
+                result.stdout = fake_pcm
+                # Stop after first conversion
+                mic._capturing = False
+            elif "-q" in cmd:
+                pass
+            else:
+                # Create a fake clip file so the size check passes
+                import os
+                clip_path = cmd[cmd.index("-f") + 1]
+                with open(clip_path, "wb") as f:
+                    f.write(b"\x00" * 200)
+            return result
+
+        with patch("audio.input.subprocess.run", side_effect=fake_run), \
+             patch("audio.input.time.sleep"):
+            mic._capture_loop()
+
+        # Should have pushed 2 chunks (6400 / 3200)
+        assert mic._buffer.qsize() == 2
 
 
 # --- Audio Output Tests ---

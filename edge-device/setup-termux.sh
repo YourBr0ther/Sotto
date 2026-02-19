@@ -24,11 +24,11 @@ pkg update -y
 
 # Install system dependencies (numpy via pkg, not pip — avoids native build failures)
 echo "[2/5] Installing system dependencies..."
-pkg install -y python python-numpy pulseaudio termux-api
+pkg install -y python python-numpy ffmpeg termux-api
 
 # Install pure-Python dependencies via pip
 echo "[3/5] Installing Python dependencies..."
-pip install paho-mqtt PyYAML sounddevice
+pip install paho-mqtt PyYAML
 
 echo ""
 echo "[4/5] Testing MQTT connectivity..."

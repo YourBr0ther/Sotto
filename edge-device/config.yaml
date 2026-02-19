@@ -1,0 +1,55 @@
+# Sotto Edge Device Configuration — Phase 1 Android Prototype
+
+device:
+  name: "sotto-phone"
+  type: "android"  # "android" or "pi5"
+
+audio:
+  input_device: null          # null = system default (phone mic)
+  output_device: null          # null = system default (BT headphones)
+  sample_rate: 16000
+  chunk_duration_ms: 500
+  noise_filter_enabled: true
+
+wake_word:
+  engine: "openwakeword"
+  model: "hey_jarvis"          # or custom wake word model
+  threshold: 0.7
+  acknowledgment_sound: true
+
+mqtt:
+  broker_host: "localhost"     # Set to Tailscale IP of home server
+  broker_port: 1883
+  client_id: "sotto-phone"
+  username: ""
+  password: ""
+  topics:
+    audio_stream: "sotto/audio/raw"
+    transcription: "sotto/audio/transcription"
+    commands: "sotto/agent/commands"
+    heartbeat: "sotto/agent/heartbeat"
+    notifications: "sotto/agent/notifications"
+    tts_audio: "sotto/audio/tts"
+    tts_text: "sotto/audio/tts_text"
+    device_state: "sotto/device/state"
+    agent_mode: "sotto/agent/mode"
+
+heartbeat:
+  schedule:
+    morning_briefing: "07:00"
+    work_intervals_minutes: 30
+    evening_summary: "18:00"
+  work_hours:
+    start: "08:00"
+    end: "17:00"
+
+agent:
+  quiet_command: "agent go quiet"
+  wake_command: "agent wake up"
+  goodnight_command: "agent goodnight"
+  morning_command: "agent good morning"
+
+connectivity:
+  retry_interval_seconds: 10
+  offline_buffer_max_mb: 500
+  sync_on_reconnect: true

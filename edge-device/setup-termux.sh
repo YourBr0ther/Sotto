@@ -28,8 +28,7 @@ pkg install -y python portaudio termux-api
 
 # Install Python dependencies (minimal set for Termux)
 echo "[3/5] Installing Python dependencies..."
-pip install --upgrade pip
-pip install paho-mqtt>=2.0.0 PyYAML>=6.0 numpy>=1.24.0 sounddevice>=0.4.6
+pip install paho-mqtt PyYAML numpy sounddevice
 
 echo ""
 echo "[4/5] Testing MQTT connectivity..."

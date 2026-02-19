@@ -183,16 +183,24 @@ class TermuxMicInput(AudioInput):
         if os.path.exists(tmp_file):
             os.unlink(tmp_file)
 
-        # Step 2: Start PulseAudio and load SLES source for Android mic
+        # Step 2: Kill any existing PulseAudio, then start with SLES source
         logger.info("Starting PulseAudio with module-sles-source")
-        subprocess.run(
-            ["pulseaudio", "--start", "--exit-idle-time=-1"],
+        subprocess.run(["pulseaudio", "--kill"], capture_output=True)
+        time.sleep(0.5)
+        result = subprocess.run(
+            [
+                "pulseaudio",
+                "-D",
+                "--exit-idle-time=-1",
+                "-L", "module-sles-source",
+            ],
             capture_output=True,
         )
-        subprocess.run(
-            ["pactl", "load-module", "module-sles-source"],
-            capture_output=True,
-        )
+        if result.returncode != 0:
+            stderr = result.stderr.decode(errors="replace")[:300]
+            logger.warning("PulseAudio start: %s", stderr)
+
+        time.sleep(1)  # Let PulseAudio settle
 
         # Step 3: Start parec streaming raw PCM to stdout
         self._process = subprocess.Popen(
@@ -204,7 +212,7 @@ class TermuxMicInput(AudioInput):
                 "--raw",
             ],
             stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
         )
 
         self._capturing = True
@@ -234,7 +242,10 @@ class TermuxMicInput(AudioInput):
                 break
 
         if self._capturing:
-            logger.warning("parec stream ended unexpectedly")
+            stderr = ""
+            if self._process and self._process.stderr:
+                stderr = self._process.stderr.read().decode(errors="replace")[:300]
+            logger.warning("parec stream ended unexpectedly: %s", stderr)
 
     def read_chunk(self, duration_ms: int = 500) -> bytes:
         if not self._capturing:

@@ -21,9 +21,12 @@ from task_extractor import TaskExtractor
 
 logger = logging.getLogger(__name__)
 
-# Add parent paths for sibling service imports
-sys.path.insert(0, str(Path(__file__).parent.parent / "operational-db"))
-sys.path.insert(0, str(Path(__file__).parent.parent / "vault-manager"))
+# Add sibling service paths (for local dev; in Docker these are in /app/ already)
+_services_dir = Path(__file__).parent.parent
+for _subdir in ("operational-db", "vault-manager"):
+    _path = str(_services_dir / _subdir)
+    if _path not in sys.path:
+        sys.path.insert(0, _path)
 
 from db_client import DatabaseClient
 from vault_client import VaultClient

@@ -9,8 +9,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy agent brain modules
 COPY agent-brain/*.py ./
 
-# Copy sibling service clients (db_client, vault_client)
+# Copy sibling service clients and schema
 COPY operational-db/db_client.py ./
+COPY operational-db/schema.sql ./
 COPY vault-manager/vault_client.py ./
 
 USER sotto

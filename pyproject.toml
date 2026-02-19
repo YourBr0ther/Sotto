@@ -1,0 +1,22 @@
+[tool.pytest.ini_options]
+testpaths = [
+    "edge-device/tests",
+    "home-server/services/operational-db/tests",
+    "home-server/services/vault-manager/tests",
+    "home-server/services/agent-brain/tests",
+    "home-server/services/transcription/tests",
+    "home-server/services/tts/tests",
+]
+pythonpath = [
+    "edge-device",
+    "edge-device/audio",
+    "edge-device/comms",
+    "edge-device/state",
+    "edge-device/utils",
+    "home-server/services/operational-db",
+    "home-server/services/vault-manager",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100

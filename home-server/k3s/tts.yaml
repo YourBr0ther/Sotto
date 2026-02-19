@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tts
+  namespace: sotto
+  labels:
+    app: tts
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tts
+  template:
+    metadata:
+      labels:
+        app: tts
+    spec:
+      containers:
+        - name: tts
+          image: sotto-tts:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: MQTT_HOST
+              value: mqtt-broker
+            - name: MQTT_PORT
+              value: "1883"
+            - name: PIPER_MODEL
+              value: ""
+          volumeMounts:
+            - name: models
+              mountPath: /models
+          resources:
+            requests:
+              memory: "256Mi"
+            limits:
+              memory: "1Gi"
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: piper-models
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: piper-models
+  namespace: sotto
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi

@@ -6,12 +6,12 @@ RUN apt-get update && \
         libespeak-ng1 && \
     rm -rf /var/lib/apt/lists/*
 
-# Install Piper binary
+# Install Piper standalone binary to /opt/piper
 RUN wget -q https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_linux_x86_64.tar.gz -O /tmp/piper.tar.gz && \
-    tar -xzf /tmp/piper.tar.gz -C /usr/local/bin/ && \
+    tar -xzf /tmp/piper.tar.gz -C /opt/ && \
     rm /tmp/piper.tar.gz && \
-    chmod +x /usr/local/bin/piper/piper && \
-    ln -s /usr/local/bin/piper/piper /usr/local/bin/piper-bin
+    chmod +x /opt/piper/piper && \
+    ln -s /opt/piper/piper /usr/local/bin/piper
 
 RUN useradd -m -r sotto && mkdir /app /models && chown -R sotto:sotto /app /models
 WORKDIR /app
@@ -22,6 +22,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY tts/*.py ./
 
 USER sotto
+
+ENV PIPER_BINARY=/opt/piper/piper
 
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
     CMD python -c "import socket; s=socket.socket(); s.settimeout(2); s.connect(('localhost',1883)); s.close()" || exit 1

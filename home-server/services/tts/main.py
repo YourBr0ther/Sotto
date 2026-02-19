@@ -33,7 +33,10 @@ class TTSService:
     ) -> None:
         self._mqtt_host = mqtt_host
         self._mqtt_port = mqtt_port
-        self._engine = PiperEngine(model_path=piper_model)
+        self._engine = PiperEngine(
+            model_path=piper_model,
+            piper_binary=os.environ.get("PIPER_BINARY", "piper"),
+        )
         self._client = mqtt.Client(
             callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
             client_id="sotto-tts",

@@ -1,0 +1,66 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Environment files
+.env
+*.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Docker
+docker-compose.override.yml
+
+# SQLite databases (operational, not schema)
+*.db
+!home-server/services/operational-db/schema.sql
+
+# Audio files (local buffers)
+*.wav
+*.mp3
+*.ogg
+*.raw
+
+# Obsidian vault data (template is committed, actual vault is not)
+vault-data/
+
+# Logs
+*.log
+logs/
+
+# Piper models (downloaded at runtime)
+*.onnx
+*.onnx.json
+
+# Whisper models (downloaded at runtime)
+models/
+
+# Tailscale
+tailscale.state

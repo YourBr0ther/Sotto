@@ -98,16 +98,25 @@ class TestTermuxMicInput:
 
     def test_start_capture_spawns_thread(self) -> None:
         mic = TermuxMicInput()
-        with patch("audio.input.subprocess.run"):
+        mock_proc = MagicMock()
+        mock_proc.stdout = MagicMock()
+        mock_proc.stdout.read = MagicMock(return_value=b"")
+        with patch("audio.input.subprocess.run"), \
+             patch("audio.input.subprocess.Popen", return_value=mock_proc), \
+             patch("audio.input.time.sleep"):
             mic.start_capture()
             assert mic.is_capturing() is True
-            assert mic._capture_thread is not None
-            assert mic._capture_thread.is_alive()
+            assert mic._reader_thread is not None
             mic._capturing = False  # stop the loop
 
     def test_start_capture_twice_warns(self) -> None:
         mic = TermuxMicInput()
-        with patch("audio.input.subprocess.run"):
+        mock_proc = MagicMock()
+        mock_proc.stdout = MagicMock()
+        mock_proc.stdout.read = MagicMock(return_value=b"")
+        with patch("audio.input.subprocess.run"), \
+             patch("audio.input.subprocess.Popen", return_value=mock_proc), \
+             patch("audio.input.time.sleep"):
             mic.start_capture()
             mic.start_capture()  # Should warn, not double-start
             assert mic.is_capturing() is True
@@ -129,51 +138,40 @@ class TestTermuxMicInput:
         assert isinstance(result, bytes)
         assert len(result) == 16000
 
-    def test_stop_capture_cleans_up(self) -> None:
-        import os
+    def test_stop_capture_kills_process(self) -> None:
         mic = TermuxMicInput()
-        temp_dir = mic._clip_dir
-        assert os.path.isdir(temp_dir)
+        mock_proc = MagicMock()
+        mic._process = mock_proc
+        mic._capturing = True
 
-        with patch("audio.input.subprocess.run"):
-            mic._capturing = True
-            mic.stop_capture()
+        mic.stop_capture()
 
         assert mic.is_capturing() is False
-        assert not os.path.isdir(temp_dir)
+        mock_proc.terminate.assert_called_once()
+        assert mic._process is None
 
-    def test_capture_loop_records_and_converts(self) -> None:
+    def test_read_loop_fills_buffer(self) -> None:
         mic = TermuxMicInput(sample_rate=16000)
         mic._capturing = True
 
         # 200ms of PCM silence = 6400 bytes (2 chunks of 3200)
-        fake_pcm = b"\x00" * 6400
-
+        fake_pcm = b"\x00" * 3200
         call_count = 0
 
-        def fake_run(cmd, **kwargs):
+        def fake_read(n):
             nonlocal call_count
             call_count += 1
-            result = MagicMock(returncode=0, stdout=b"", stderr=b"")
-            if "ffmpeg" in cmd:
-                result.stdout = fake_pcm
-                # Stop after first conversion
-                mic._capturing = False
-            elif "-q" in cmd:
-                pass
-            else:
-                # Create a fake clip file so the size check passes
-                import os
-                clip_path = cmd[cmd.index("-f") + 1]
-                with open(clip_path, "wb") as f:
-                    f.write(b"\x00" * 200)
-            return result
+            if call_count <= 2:
+                return fake_pcm
+            mic._capturing = False
+            return b""
 
-        with patch("audio.input.subprocess.run", side_effect=fake_run), \
-             patch("audio.input.time.sleep"):
-            mic._capture_loop()
+        mock_proc = MagicMock()
+        mock_proc.stdout.read = fake_read
+        mic._process = mock_proc
 
-        # Should have pushed 2 chunks (6400 / 3200)
+        mic._read_loop()
+
         assert mic._buffer.qsize() == 2
 
 

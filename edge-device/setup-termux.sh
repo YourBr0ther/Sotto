@@ -3,8 +3,8 @@
 # Run this after installing Termux and Termux:API on your Android phone.
 #
 # Prerequisites:
-#   1. Install Termux from F-Droid (NOT Play Store — the Play Store version is outdated)
-#   2. Install Termux:API from F-Droid (for microphone and audio access)
+#   1. Install Termux (Play Store or F-Droid — use the same source for both)
+#   2. Install Termux:API from the same source (for microphone and audio access)
 #   3. Grant microphone permission to Termux when prompted
 #
 # Usage:

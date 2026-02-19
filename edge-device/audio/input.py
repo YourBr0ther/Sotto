@@ -213,6 +213,7 @@ class TermuxMicInput(AudioInput):
                     [
                         "ffmpeg", "-y",
                         "-i", clip_path,
+                        "-af", "volume=3.0",
                         "-f", "s16le",
                         "-ar", str(self._sample_rate),
                         "-ac", "1",

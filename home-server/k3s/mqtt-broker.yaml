@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: mosquitto-config
+  name: sotto-mosquitto-config
   namespace: sotto
 data:
   mosquitto.conf: |
@@ -13,73 +13,109 @@ data:
     log_type all
     connection_messages true
 ---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: sotto-mqtt-data
+  namespace: sotto
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 1Gi
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: mqtt-broker
+  name: sotto-mqtt
   namespace: sotto
   labels:
-    app: mqtt-broker
+    app: sotto-mqtt
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
-      app: mqtt-broker
+      app: sotto-mqtt
   template:
     metadata:
       labels:
-        app: mqtt-broker
+        app: sotto-mqtt
+        topology-group: balanced
     spec:
+      topologySpreadConstraints:
+        - maxSkew: 2
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              topology-group: balanced
       containers:
         - name: mosquitto
           image: eclipse-mosquitto:2
           ports:
             - containerPort: 1883
+              protocol: TCP
           volumeMounts:
             - name: config
               mountPath: /mosquitto/config/mosquitto.conf
               subPath: mosquitto.conf
-              readOnly: true
             - name: data
               mountPath: /mosquitto/data
           livenessProbe:
             tcpSocket:
               port: 1883
             initialDelaySeconds: 5
-            periodSeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
           readinessProbe:
             tcpSocket:
               port: 1883
-            initialDelaySeconds: 3
-            periodSeconds: 5
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
       volumes:
         - name: config
           configMap:
-            name: mosquitto-config
+            name: sotto-mosquitto-config
         - name: data
           persistentVolumeClaim:
-            claimName: mqtt-data
+            claimName: sotto-mqtt-data
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: mqtt-broker
+  name: sotto-mqtt
   namespace: sotto
 spec:
   selector:
-    app: mqtt-broker
+    app: sotto-mqtt
   ports:
     - port: 1883
       targetPort: 1883
 ---
 apiVersion: v1
-kind: PersistentVolumeClaim
+kind: Service
 metadata:
-  name: mqtt-data
+  name: sotto-mqtt-nodeport
   namespace: sotto
 spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 1Gi
+  type: NodePort
+  selector:
+    app: sotto-mqtt
+  ports:
+    - port: 1883
+      targetPort: 1883
+      nodePort: 31883

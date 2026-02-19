@@ -1,52 +1,83 @@
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: tts
-  namespace: sotto
-  labels:
-    app: tts
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: tts
-  template:
-    metadata:
-      labels:
-        app: tts
-    spec:
-      containers:
-        - name: tts
-          image: sotto-tts:latest
-          imagePullPolicy: IfNotPresent
-          env:
-            - name: MQTT_HOST
-              value: mqtt-broker
-            - name: MQTT_PORT
-              value: "1883"
-            - name: PIPER_MODEL
-              value: ""
-          volumeMounts:
-            - name: models
-              mountPath: /models
-          resources:
-            requests:
-              memory: "256Mi"
-            limits:
-              memory: "1Gi"
-      volumes:
-        - name: models
-          persistentVolumeClaim:
-            claimName: piper-models
----
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: piper-models
+  name: sotto-tts-models
   namespace: sotto
 spec:
   accessModes:
     - ReadWriteOnce
+  storageClassName: longhorn
   resources:
     requests:
-      storage: 5Gi
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sotto-tts
+  namespace: sotto
+  labels:
+    app: sotto-tts
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: sotto-tts
+  template:
+    metadata:
+      labels:
+        app: sotto-tts
+        topology-group: balanced
+    spec:
+      securityContext:
+        fsGroup: 999
+      topologySpreadConstraints:
+        - maxSkew: 2
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              topology-group: balanced
+      containers:
+        - name: tts
+          image: docker.io/yourbr0ther/sotto-tts:latest
+          imagePullPolicy: Always
+          env:
+            - name: MQTT_HOST
+              value: "sotto-mqtt"
+            - name: MQTT_PORT
+              value: "1883"
+            - name: PIPER_BINARY
+              value: "/opt/piper/piper"
+            - name: PIPER_MODEL
+              value: "/models/en_US-lessac-medium.onnx"
+          volumeMounts:
+            - name: models
+              mountPath: /models
+          livenessProbe:
+            exec:
+              command: ["python", "-c", "import os; os.kill(1, 0)"]
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command: ["python", "-c", "import os; os.kill(1, 0)"]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: sotto-tts-models

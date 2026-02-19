@@ -18,8 +18,8 @@ wake_word:
   acknowledgment_sound: true
 
 mqtt:
-  broker_host: "localhost"     # Set to Tailscale IP of home server
-  broker_port: 1883
+  broker_host: "10.0.2.180"    # karesh (k3s-node1) LAN IP; change to Tailscale IP for remote access
+  broker_port: 31883            # k3s NodePort for MQTT
   client_id: "sotto-phone"
   username: ""
   password: ""

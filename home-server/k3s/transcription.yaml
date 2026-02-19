@@ -1,35 +1,68 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: transcription
+  name: sotto-transcription
   namespace: sotto
   labels:
-    app: transcription
+    app: sotto-transcription
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
-      app: transcription
+      app: sotto-transcription
   template:
     metadata:
       labels:
-        app: transcription
+        app: sotto-transcription
+        topology-group: balanced
     spec:
+      topologySpreadConstraints:
+        - maxSkew: 2
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              topology-group: balanced
       containers:
         - name: transcription
-          image: sotto-transcription:latest
-          imagePullPolicy: IfNotPresent
+          image: docker.io/yourbr0ther/sotto-transcription:latest
+          imagePullPolicy: Always
           env:
             - name: MQTT_HOST
-              value: mqtt-broker
+              value: "sotto-mqtt"
             - name: MQTT_PORT
               value: "1883"
             - name: WHISPER_MODEL
-              value: base
+              value: "base"
             - name: WHISPER_DEVICE
-              value: auto
+              value: "cpu"
+          livenessProbe:
+            exec:
+              command: ["python", "-c", "import os; os.kill(1, 0)"]
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command: ["python", "-c", "import os; os.kill(1, 0)"]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          startupProbe:
+            exec:
+              command: ["python", "-c", "import os; os.kill(1, 0)"]
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 30
           resources:
             requests:
-              memory: "1Gi"
+              memory: "512Mi"
+              cpu: "250m"
             limits:
-              memory: "4Gi"
+              memory: "2Gi"
+              cpu: "2000m"

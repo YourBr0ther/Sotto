@@ -2,6 +2,6 @@ paho-mqtt>=2.0.0
 PyYAML>=6.0
 sounddevice>=0.4.6
 numpy>=1.24.0
-openwakeword>=0.6.0
-piper-tts>=1.2.0
-noisereduce>=3.0.0
+
+# Optional: wake word detection (large download, degrades gracefully if missing)
+# openwakeword>=0.6.0

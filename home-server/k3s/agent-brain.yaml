@@ -1,58 +1,87 @@
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: agent-brain
-  namespace: sotto
-  labels:
-    app: agent-brain
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: agent-brain
-  template:
-    metadata:
-      labels:
-        app: agent-brain
-    spec:
-      containers:
-        - name: agent-brain
-          image: sotto-agent-brain:latest
-          imagePullPolicy: IfNotPresent
-          env:
-            - name: MQTT_HOST
-              value: mqtt-broker
-            - name: MQTT_PORT
-              value: "1883"
-            - name: OLLAMA_URL
-              value: http://ollama:11434
-            - name: OLLAMA_MODEL
-              value: llama3.1:8b
-            - name: DB_PATH
-              value: /data/sotto.db
-            - name: VAULT_PATH
-              value: /data/vault
-          volumeMounts:
-            - name: data
-              mountPath: /data
-          resources:
-            requests:
-              memory: "256Mi"
-            limits:
-              memory: "512Mi"
-      volumes:
-        - name: data
-          persistentVolumeClaim:
-            claimName: sotto-data
----
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: sotto-data
+  name: sotto-agent-brain-data
   namespace: sotto
 spec:
   accessModes:
     - ReadWriteOnce
+  storageClassName: longhorn
   resources:
     requests:
       storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sotto-agent-brain
+  namespace: sotto
+  labels:
+    app: sotto-agent-brain
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: sotto-agent-brain
+  template:
+    metadata:
+      labels:
+        app: sotto-agent-brain
+        topology-group: balanced
+    spec:
+      securityContext:
+        fsGroup: 999
+      topologySpreadConstraints:
+        - maxSkew: 2
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              topology-group: balanced
+      containers:
+        - name: agent-brain
+          image: docker.io/yourbr0ther/sotto-agent-brain:latest
+          imagePullPolicy: Always
+          env:
+            - name: MQTT_HOST
+              value: "sotto-mqtt"
+            - name: MQTT_PORT
+              value: "1883"
+            - name: OLLAMA_URL
+              value: "http://sotto-ollama:11434"
+            - name: OLLAMA_MODEL
+              value: "llama3.1:8b"
+            - name: DB_PATH
+              value: "/data/sotto.db"
+            - name: VAULT_PATH
+              value: "/data/vault"
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          livenessProbe:
+            exec:
+              command: ["python", "-c", "import os; os.kill(1, 0)"]
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command: ["python", "-c", "import os; os.kill(1, 0)"]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: sotto-agent-brain-data

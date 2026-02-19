@@ -60,7 +60,7 @@ class AudioStreamer:
             "audio_b64": audio_b64,
             "sample_rate": self._sample_rate,
             "duration_ms": duration_ms,
-            "quality_score": quality,
+            "quality_score": float(quality),
             "chunk_index": self._chunks_sent,
             "encoding": "pcm_s16le",
         }
@@ -69,7 +69,7 @@ class AudioStreamer:
         self._chunks_sent += 1
 
         return {
-            "quality_score": quality,
+            "quality_score": float(quality),
             "chunk_index": self._chunks_sent - 1,
             "duration_ms": duration_ms,
             "size_bytes": len(filtered),

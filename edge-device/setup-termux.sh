@@ -22,13 +22,13 @@ echo ""
 echo "[1/5] Updating Termux packages..."
 pkg update -y
 
-# Install system dependencies
+# Install system dependencies (numpy via pkg, not pip — avoids native build failures)
 echo "[2/5] Installing system dependencies..."
-pkg install -y python portaudio termux-api
+pkg install -y python python-numpy portaudio termux-api
 
-# Install Python dependencies (minimal set for Termux)
+# Install pure-Python dependencies via pip
 echo "[3/5] Installing Python dependencies..."
-pip install paho-mqtt PyYAML numpy sounddevice
+pip install paho-mqtt PyYAML sounddevice
 
 echo ""
 echo "[4/5] Testing MQTT connectivity..."
